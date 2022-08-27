@@ -26,6 +26,8 @@ func (l *tunListener) parseMetadata(md mdata.Metadata) (err error) {
 		route   = "route"
 		routes  = "routes"
 		gateway = "gw"
+		rtc  	= "rtc"
+		qid  	= "qid"
 	)
 
 	config := &tun_util.Config{
@@ -34,9 +36,19 @@ func (l *tunListener) parseMetadata(md mdata.Metadata) (err error) {
 		Peer:    mdx.GetString(md, peer),
 		MTU:     mdx.GetInt(md, mtu),
 		Gateway: mdx.GetString(md, gateway),
+		RTC:     mdx.GetString(md, rtc),
+		QueueId: mdx.GetString(md, qid),
 	}
 	if config.MTU <= 0 {
 		config.MTU = DefaultMTU
+	}
+
+	if config.RTC == "" {
+		config.RTC = "0.0.0.0"
+	}
+
+	if config.QueueId == "" {
+		config.QueueId = "0"
 	}
 
 	gw := net.ParseIP(config.Gateway)

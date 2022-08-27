@@ -16,4 +16,6 @@ type Config struct {
 	MTU     int
 	Gateway string
 	Routes  []Route
+	RTC  string
+	QueueId string	
 }
