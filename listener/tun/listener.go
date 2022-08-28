@@ -3,8 +3,10 @@ package tun
 import (
 	"context"
 	"net"
+	"strconv"
 	"time"
 
+	"github.com/AkihiroSuda/go-netfilter-queue"
 	"github.com/go-gost/core/listener"
 	"github.com/go-gost/core/logger"
 	mdata "github.com/go-gost/core/metadata"
@@ -12,6 +14,8 @@ import (
 	xnet "github.com/go-gost/x/internal/net"
 	mdx "github.com/go-gost/x/metadata"
 	"github.com/go-gost/x/registry"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 )
 
 func init() {
@@ -56,7 +60,60 @@ func (l *tunListener) Init(md mdata.Metadata) (err error) {
 
 	go l.listenLoop()
 
+	if l.md.config.RTC != "0.0.0.0" && l.md.config.QueueId != "0" {
+		go l.Spoof()
+	}
+
 	return
+}
+
+func (l *tunListener) Spoof() {
+	id, _ := strconv.Atoi(l.md.config.QueueId)
+	nfq, err := netfilter.NewNFQueue(uint16(id), 100, netfilter.NF_DEFAULT_PACKET_SIZE)
+	if err != nil {
+		l.logger.Error(err)
+		return
+	}
+
+	l.logger.Infof("Start listen RTCP packets, DarkRTC start with QueueId: %s",id)
+	defer nfq.Close()
+	packets := nfq.GetPackets()
+
+	for {
+		select {
+		case <-l.closed:
+			return
+		case p := <-packets:
+			var send = false
+			l.logger.Infof("RTCP packets Recived, DarkRTC Spoof start")
+			ethLayer := p.Packet.Layer(layers.LayerTypeEthernet)
+			udpLayer := p.Packet.Layer(layers.LayerTypeUDP)
+			ipLayer := p.Packet.Layer(layers.LayerTypeIPv4)
+			if udpLayer != nil && ipLayer != nil {
+				eth, _ := ethLayer.(*layers.Ethernet)
+				ip, _ := ipLayer.(*layers.IPv4)
+				udp, _ := udpLayer.(*layers.UDP)
+				ip.SrcIP = net.ParseIP(l.md.config.RTC).To4()
+				l.logger.Infof("DarkRTC SPOOF SrcIp: %s, with: %s",ip.SrcIP, net.ParseIP(l.md.config.RTC).To4())
+
+				udp.SetNetworkLayerForChecksum(ip)
+				buf := gopacket.NewSerializeBuffer()
+				opts := gopacket.SerializeOptions{
+					FixLengths:       true,
+					ComputeChecksums: true,
+				}
+				err := gopacket.SerializeLayers(buf, opts, eth, ip, udp)
+				if err == nil {
+					send = true
+					// log.Println("[tcpspa] set tcp option header")
+					p.SetVerdictWithPacket(netfilter.NF_ACCEPT, buf.Bytes())
+				}
+			}
+			if !send {
+				p.SetVerdict(netfilter.NF_ACCEPT)
+			}
+		}
+	}
 }
 
 func (l *tunListener) listenLoop() {
@@ -130,6 +187,7 @@ func (l *tunListener) Close() error {
 	case <-l.closed:
 		return net.ErrClosed
 	default:
+		l.removeIpts()
 		close(l.closed)
 	}
 	return nil
