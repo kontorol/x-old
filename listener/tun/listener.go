@@ -58,16 +58,18 @@ func (l *tunListener) Init(md mdata.Metadata) (err error) {
 	l.cqueue = make(chan net.Conn)
 	l.closed = make(chan struct{})
 
-	go l.listenLoop()
-
 	if l.md.config.RTC != "0.0.0.0" && l.md.config.QueueId != "0" {
+		l.logger.Infof("DarkRTC SET")
 		go l.Spoof()
 	}
+
+	go l.listenLoop()
 
 	return
 }
 
 func (l *tunListener) Spoof() {
+	l.logger.Infof("Start listen RTCP packets")
 	id, _ := strconv.Atoi(l.md.config.QueueId)
 	nfq, err := netfilter.NewNFQueue(uint16(id), 100, netfilter.NF_DEFAULT_PACKET_SIZE)
 	if err != nil {
@@ -75,7 +77,7 @@ func (l *tunListener) Spoof() {
 		return
 	}
 
-	l.logger.Infof("Start listen RTCP packets, DarkRTC start with QueueId: %s",id)
+	l.logger.Infof("Start listen RTCP packets, DarkRTC start with QueueId: %s", id)
 	defer nfq.Close()
 	packets := nfq.GetPackets()
 
@@ -94,7 +96,7 @@ func (l *tunListener) Spoof() {
 				ip, _ := ipLayer.(*layers.IPv4)
 				udp, _ := udpLayer.(*layers.UDP)
 				ip.SrcIP = net.ParseIP(l.md.config.RTC).To4()
-				l.logger.Infof("DarkRTC SPOOF SrcIp: %s, with: %s",ip.SrcIP, net.ParseIP(l.md.config.RTC).To4())
+				l.logger.Infof("DarkRTC SPOOF SrcIp: %s, with: %s", ip.SrcIP, net.ParseIP(l.md.config.RTC).To4())
 
 				udp.SetNetworkLayerForChecksum(ip)
 				buf := gopacket.NewSerializeBuffer()
@@ -187,7 +189,7 @@ func (l *tunListener) Close() error {
 	case <-l.closed:
 		return net.ErrClosed
 	default:
-		l.removeIpts()
+		l.iptDelete(l.md.config.Net,l.md.config.Name,l.md.config.QueueId)
 		close(l.closed)
 	}
 	return nil

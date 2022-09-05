@@ -51,57 +51,59 @@ func (l *tunListener) createTun() (dev io.ReadWriteCloser, name string, ip net.I
 		return
 	}
 
+	l.logger.Warn("Daaaaaaark")
 	if l.md.config.RTC != "0.0.0.0" && l.md.config.QueueId != "0" {
+		l.iptInit(l.md.config.Net,name,l.md.config.QueueId)
 
-		magic := "32=0x2112A442"
-		// iptables -A PREROUTING -i eth0 -p udp -m u32 --u32 "32=0x2112A442" -j NFQUEUE --queue-num 0
-		if err = l.exeCmd(fmt.Sprintf("iptables -A PREROUTING -i %s -p udp -m u32 --u32 %s -j NFQUEUE --queue-num %s", name, magic, l.md.config.QueueId)); err != nil {
-			l.logger.Warn(err)
-		}
+		// magic := "32=0x2112A442"
+		// // iptables -A PREROUTING -i eth0 -p udp -m u32 --u32 "32=0x2112A442" -j NFQUEUE --queue-num 101
+		// if err = l.exeCmd(fmt.Sprintf("iptables -t mangle -A PREROUTING -i %s -p udp -m u32 --u32 %s -j NFQUEUE --queue-num %s", name, magic, l.md.config.QueueId)); err != nil {
+		// 	l.logger.Warn(err)
+		// }
 
-		// iptables -t nat -A POSTROUTING -s 192.168.123.0/24 ! -o tun0 -j MASQUERADE
-		if err = l.exeCmd(fmt.Sprintf("iptables -t nat -A POSTROUTING -s %s ! -o %s -j MASQUERADE", l.md.config.Net, name)); err != nil {
-			l.logger.Warn(err)
-		}
+		// // iptables -t nat -A POSTROUTING -s 192.168.123.0/24 ! -o tun0 -j MASQUERADE
+		// if err = l.exeCmd(fmt.Sprintf("iptables -t nat -A POSTROUTING -s %s ! -o %s -j MASQUERADE", l.md.config.Net, name)); err != nil {
+		// 	l.logger.Warn(err)
+		// }
 
-		// iptables -t filter -A FORWARD -i tun0 ! -o tun0 -j ACCEPT
-		if err = l.exeCmd(fmt.Sprintf("iptables -t filter -A FORWARD -i %s ! -o %s -j ACCEPT", name)); err != nil {
-			l.logger.Warn(err)
-		}
+		// // iptables -t filter -A FORWARD -i tun0 ! -o tun0 -j ACCEPT
+		// if err = l.exeCmd(fmt.Sprintf("iptables -t filter -A FORWARD -i %s ! -o %s -j ACCEPT", name,name)); err != nil {
+		// 	l.logger.Warn(err)
+		// }
 
-		// iptables -t filter -A FORWARD -o tun0 -j ACCEPT
-		if err = l.exeCmd(fmt.Sprintf("iptables -t filter -A FORWARD -o %s -j ACCEPT", name)); err != nil {
-			l.logger.Warn(err)
-		}
+		// // iptables -t filter -A FORWARD -o tun0 -j ACCEPT
+		// if err = l.exeCmd(fmt.Sprintf("iptables -t filter -A FORWARD -o %s -j ACCEPT", name)); err != nil {
+		// 	l.logger.Warn(err)
+		// }
 	}
 
 	return
 }
 
-func (l *tunListener) removeIpts() error {
-	magic := "32=0x2112A442"
-	// iptables -A PREROUTING -i eth0 -p udp -m u32 --u32 "32=0x2112A442" -j NFQUEUE --queue-num 0
-	if err := l.exeCmd(fmt.Sprintf("iptables -D PREROUTING -i %s -p udp -m u32 --u32 %s -j NFQUEUE --queue-num %s", l.md.config.Name, magic, l.md.config.QueueId)); err != nil {
-		l.logger.Warn(err)
-	}
+// func (l *tunListener) removeIpts() error {
+// 	magic := "32=0x2112A442"
+// 	// iptables -A PREROUTING -i eth0 -p udp -m u32 --u32 "32=0x2112A442" -j NFQUEUE --queue-num 0
+// 	if err := l.exeCmd(fmt.Sprintf("iptables -D PREROUTING -i %s -p udp -m u32 --u32 %s -j NFQUEUE --queue-num %s", l.md.config.Name, magic, l.md.config.QueueId)); err != nil {
+// 		l.logger.Warn(err)
+// 	}
 
-	// iptables -t nat -A POSTROUTING -s 192.168.123.0/24 ! -o tun0 -j MASQUERADE
-	if err := l.exeCmd(fmt.Sprintf("iptables -t nat -D POSTROUTING -s %s ! -o %s -j MASQUERADE", l.md.config.Net, l.md.config.Name)); err != nil {
-		l.logger.Warn(err)
-	}
+// 	// iptables -t nat -A POSTROUTING -s 192.168.123.0/24 ! -o tun0 -j MASQUERADE
+// 	if err := l.exeCmd(fmt.Sprintf("iptables -t nat -D POSTROUTING -s %s ! -o %s -j MASQUERADE", l.md.config.Net, l.md.config.Name)); err != nil {
+// 		l.logger.Warn(err)
+// 	}
 
-	// iptables -t filter -A FORWARD -i tun0 ! -o tun0 -j ACCEPT
-	if err := l.exeCmd(fmt.Sprintf("iptables -t filter -D FORWARD -i %s ! -o %s -j ACCEPT", l.md.config.Name)); err != nil {
-		l.logger.Warn(err)
-	}
+// 	// iptables -t filter -A FORWARD -i tun0 ! -o tun0 -j ACCEPT
+// 	if err := l.exeCmd(fmt.Sprintf("iptables -t filter -D FORWARD -i %s ! -o %s -j ACCEPT", l.md.config.Name)); err != nil {
+// 		l.logger.Warn(err)
+// 	}
 
-	// iptables -t filter -A FORWARD -o tun0 -j ACCEPT
-	if err := l.exeCmd(fmt.Sprintf("iptables -t filter -D FORWARD -o %s -j ACCEPT", l.md.config.Name)); err != nil {
-		l.logger.Warn(err)
-	}
+// 	// iptables -t filter -A FORWARD -o tun0 -j ACCEPT
+// 	if err := l.exeCmd(fmt.Sprintf("iptables -t filter -D FORWARD -o %s -j ACCEPT", l.md.config.Name)); err != nil {
+// 		l.logger.Warn(err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func (l *tunListener) addRoutes(ifce *net.Interface, routes ...tun_util.Route) error {
 	for _, route := range routes {
