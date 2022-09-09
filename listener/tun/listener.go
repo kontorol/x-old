@@ -2,6 +2,7 @@ package tun
 
 import (
 	"context"
+	"encoding/hex"
 	"net"
 	"strconv"
 	"time"
@@ -86,29 +87,40 @@ func (l *tunListener) Spoof() {
 		case <-l.closed:
 			return
 		case p := <-packets:
+			packet := gopacket.NewPacket(p.Packet.Data(), layers.LayerTypeIPv4, gopacket.Default)
+			l.logger.Infof("Hex dump of real IP packet taken as input:\n")
+			l.logger.Infof(hex.Dump(p.Packet.Data()))
 			var send = false
 			l.logger.Infof("RTCP packets Recived, DarkRTC Spoof start")
-			ethLayer := p.Packet.Layer(layers.LayerTypeEthernet)
-			udpLayer := p.Packet.Layer(layers.LayerTypeUDP)
-			ipLayer := p.Packet.Layer(layers.LayerTypeIPv4)
+			// ethLayer := p.Packet.Layer(layers.LayerTypeEthernet)
+			udpLayer := packet.Layer(layers.LayerTypeUDP)
+			ipLayer := packet.Layer(layers.LayerTypeIPv4)
 			if udpLayer != nil && ipLayer != nil {
-				eth, _ := ethLayer.(*layers.Ethernet)
+				// eth, _ := ethLayer.(*layers.Ethernet)
 				ip, _ := ipLayer.(*layers.IPv4)
 				udp, _ := udpLayer.(*layers.UDP)
-				ip.SrcIP = net.ParseIP(l.md.config.RTC).To4()
-				l.logger.Infof("DarkRTC SPOOF SrcIp: %s, with: %s", ip.SrcIP, net.ParseIP(l.md.config.RTC).To4())
+				l.logger.Infof("DarkRTC SPOOF SrcIp: %s, with: %s and des: %s, buf:", ip.SrcIP, net.ParseIP(l.md.config.RTC).To4(), ip.DstIP)
+				ip.SrcIP = net.ParseIP(l.md.config.RTC)
 
-				udp.SetNetworkLayerForChecksum(ip)
-				buf := gopacket.NewSerializeBuffer()
 				opts := gopacket.SerializeOptions{
 					FixLengths:       true,
 					ComputeChecksums: true,
 				}
-				err := gopacket.SerializeLayers(buf, opts, eth, ip, udp)
+				udp.SetNetworkLayerForChecksum(ip)
+				buf := gopacket.NewSerializeBuffer()
+				err := gopacket.SerializePacket(buf, opts, packet)
+				if err != nil {
+					panic(err)
+				}
+				outgoingPacket := buf.Bytes()
+
+				l.logger.Infof("DarkRTC SPOOF Berfore send verdict")
 				if err == nil {
 					send = true
 					// log.Println("[tcpspa] set tcp option header")
-					p.SetVerdictWithPacket(netfilter.NF_ACCEPT, buf.Bytes())
+					l.logger.Infof(hex.Dump(outgoingPacket))
+					p.SetVerdictWithPacket(netfilter.NF_ACCEPT, outgoingPacket)
+					
 				}
 			}
 			if !send {
@@ -189,7 +201,7 @@ func (l *tunListener) Close() error {
 	case <-l.closed:
 		return net.ErrClosed
 	default:
-		l.iptDelete(l.md.config.Net,l.md.config.Name,l.md.config.QueueId)
+		l.iptDelete(l.md.config.Net, l.md.config.Name, l.md.config.QueueId)
 		close(l.closed)
 	}
 	return nil
